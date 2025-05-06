@@ -272,7 +272,7 @@ When a request to your site renders one or more remote data blocks, our plugin w
 
 The plugin offers a caching layer for optimal performance and helps avoid rate limiting from remote data sources. It will be used if your WordPress environment configures a [persistent object cache](https://developer.wordpress.org/reference/classes/wp_object_cache/#persistent-cache-plugins). Otherwise, the plugin will utilize in-memory (per-page-load) caching. Deploying to production without a persistent object cache is not recommended.
 
-The default TTL for all cache objects is 5 minutes, but it can be [configured per query or request](../extending/query.md#cache_ttl-intnullcallable).
+The default TTL for all cache objects is 5 minutes, but it can be [configured per query or request](../extending/query.md#cache_ttl-intnullcallable). Error responses are cached for 30 seconds to avoid overwhelming the remote data source with repeated requests under error conditions.
 
 ## Theming
 
@@ -366,11 +366,8 @@ We are assuming `https://api.example.com/` returns JSON that has a shape like:
 ```php
 function register_your_custom_block() {
 	$data_source = HttpDataSource::from_array( [
-		'service_config' => [
-			'__version' => 1,
-			'display_name' => 'Example API',
-			'endpoint' => 'https://api.example.com/',
-		],
+		'display_name' => 'Example API',
+		'endpoint' => 'https://api.example.com/',
 	] );
 
 	$render_query = HttpQuery::from_array( [
@@ -502,79 +499,14 @@ Most HTTP-powered APIs can be represented by defining a class that extends `Http
 
 ```php
 $data_source = HttpDataSource::from_array( [
-    'service_config' => [
-        '__version' => 1,
-        'display_name' => 'Example API',
-        'endpoint' => 'https://api.example.com/',
-        'request_headers' => [
-            'Content-Type' => 'application/json',
-            'X-Api-Key' => MY_API_KEY_CONSTANT,
-        ],
-    ],
+	'display_name' => 'Example API',
+	'endpoint' => 'https://api.example.com/',
+	'request_headers' => [
+		'Content-Type' => 'application/json',
+		'X-Api-Key' => MY_API_KEY_CONSTANT,
+	],
 ] );
 ```
-
-## HttpDataSource configuration
-
-### **version**: number (required)
-
-There is no built-in versioning logic, but a version number is required for best practice reasons. Changes to the data source could significantly affect [queries](query.md). Checking the data source version is a sensible defensive practice.
-
-### display_name: string (required)
-
-The display name is used in the UI to identify your data source.
-
-### endpoint: string
-
-This is the default endpoint for the data source and can save repeated use in queries. We would suggest putting the root API URL here and then manipulating it as necessary in individual [queries](query.md).
-
-### request_headers: array
-
-Headers will be set according to the properties of the array. When providing authentication credentials, take care to keep them from appearing in code repositories. We strongly recommend using environment variables or other secure means for storage.
-
-## Additional parameters
-
-You can add any additional parameters that are necessary for your data source. In our [Airtable example](https://github.com/Automattic/remote-data-blocks/blob/trunk/example/airtable/events/register.php), you can see that we are setting values for the Airtable `base` and `table`.
-
-Consider adding whatever configuration would be useful to queries. As an example, queries have an `endpoint` property. Our [Zip code example](https://github.com/Automattic/remote-data-blocks/blob/trunk/example/rest-api/zip-code/zip-code.php) sets the endpoint with a function:
-
-```php
-$zipcode_query = HttpQuery::from_array( [
-    'data_source' => $zipcode_data_source,
-    'endpoint' => function ( array $input_variables ) use ( $zipcode_data_source ): string {
-        return $zipcode_data_source->get_endpoint() . $input_variables['zip_code'];
-    },
-])
-```
-
-In this case the `data_source` has a built in `get_endpoint()` method. Other configuration options can be retrieved directly:
-
-```php
-$data_source = HttpDataSource::from_array( [
-    'service_config' => [
-        '__version' => 1,
-        'display_name' => 'More Complicated Example API',
-        'endpoint' => 'https://api.complexexample.com/',
-        'request_headers' => [
-            'Content-Type' => 'application/json',
-            'X-Api-Key' => MY_API_KEY_CONSTANT,
-        ],
-    ],
-] );
-
-$my_config = [
- 'some_identifier' => 'id-123'
-];
-
-$zipcode_query = HttpQuery::from_array( [
-    'data_source' => $data_source,
-    'endpoint' => function ( array $input_variables ) use ( $data_source, $my_config ): string {
-        return  return $data_source->get_endpoint() . $my_config['some_identifier'] . "/" . $input_variables['search'];
-    },
-] )
-```
-
-The goal with design was to provide you with flexibility you need to represent any data source.
 
 ## HttpDataSource configuration
 
@@ -669,28 +601,20 @@ if ( defined( 'REMOTE_DATA_BLOCKS__LOADED' ) ) {
 }
 ```
 
-### wpcomvip_log
+### remote_data_blocks_log
 
-If you want to send debugging information to another source besides [Query Monitor](../troubleshooting.md#query-monitor), use the `wpcomvip_log` action.
+If you want to send debugging information to another source besides [Query Monitor](../troubleshooting.md#query-monitor), use the `remote_data_blocks_log` action.
 
 ```php
 function custom_log( string $namespace, string $level, string $message, array $context ): void {
     // Send the log to a custom destination.
 }
-add_action( 'wpcomvip_log', 'custom_log', 10, 4 );
+add_action( 'remote_data_blocks_log', 'custom_log', 10, 4 );
 ```
 
 ## Filters
 
 Filters give you the ability to change data during the execution of the plugin. Callback functions for Filters will accept a variable, modify it, and return it. They are meant to work in an isolated manner, and should never have side effects such as affecting global variables and output.
-
-### wpcomvip_log_to_query_monitor
-
-Filter whether to log a message to Query Monitor (default: `true`).
-
-```php
-add_filter( 'wpcomvip_log_to_query_monitor', '__return_false' );
-```
 
 ### remote_data_blocks_register_example_block
 
@@ -1396,11 +1320,13 @@ The `request_body` property defines the request body for the query. It can be an
 
 The `cache_ttl` property defines how long the query response should be cached in seconds. It can be an integer, a callable function that returns an integer, or `null`. The callable function accepts an associative array of input variables (`[ $var_name => $value ]`).
 
-A value of `-1` indicates the query should not be cached. A value of `null` indicates the default TTL should be used (60 seconds). If omitted, the default TTL is used.
+A value of `-1` indicates the query should not be cached. A value of `null` indicates the default TTL should be used (300 seconds). If omitted, the default TTL is used.
 
 Remote data blocks utilize the WordPress object cache (`wp_cache_get()` / `wp_cache_set()`) for response caching. Ensure that your platform provides or installs a persistent object cache plugin so that this value is respected.
 
-If you do not have a peristent object cache, no caching will be available. We do not recommend running the Remote Data Blocks plugin in this configuration.
+If you do not have a peristent object cache, this property will be ignored and responses will only be cached in-memory. We do not recommend running the Remote Data Blocks plugin in this configuration.
+
+Note that error responses are cached for 30 seconds to avoid overwhelming the remote data source with repeated requests under error conditions.
 
 #### Example
 
@@ -1588,6 +1514,9 @@ This page will walk you through registering a remote data block that loads data 
 4. Fill in the following details:
    - Data Source Name: Zip Code API
    - URL: https://api.zippopotam.us/us/
+
+_Note: The `endpoint` function in the code below will append the provided Zip Code (by the user) to the "URL" value defined here, to form the final endpoint of this example_
+
 5. If your API requires authentication, enter those details. This API does not.
 6. Save the data source and return the data source list.
 7. In the Actions column, click the three-dot menu, then "Copy UUID" to copy the data source's UUID to your clipboard.
@@ -2987,16 +2916,13 @@ use RemoteDataBlocks\Config\Query\HttpQuery;
 use function add_query_arg;
 
 function register_aic_block(): void {
-	$aic_data_source = HttpDataSource::from_array([
-		'service_config' => [
-			'__version' => 1,
-			'display_name' => 'Art Institute of Chicago',
-			'endpoint' => 'https://api.artic.edu/api/v1/artworks',
-			'request_headers' => [
-				'Content-Type' => 'application/json',
-			],
+	$aic_data_source = HttpDataSource::from_array( [
+		'display_name' => 'Art Institute of Chicago',
+		'endpoint' => 'https://api.artic.edu/api/v1/artworks',
+		'request_headers' => [
+			'Content-Type' => 'application/json',
 		],
-	]);
+	] );
 
 	$get_art_query = HttpQuery::from_array([
 		'data_source' => $aic_data_source,
@@ -3064,7 +2990,7 @@ function register_aic_block(): void {
 		'endpoint' => function ( array $input_variables ) use ( $aic_data_source ): string {
 			$endpoint = $aic_data_source->get_endpoint();
 			return add_query_arg( [
-				'limit' => $input_variables['limit'],  
+				'limit' => $input_variables['limit'],
 				'fields' => 'id,title,image_id,artist_title',
 				'page' => $input_variables['page'],
 			], $endpoint );
@@ -3180,7 +3106,7 @@ function register_aic_block(): void {
 	register_remote_data_block( [
 		'title' => 'Art Institute of Chicago Loop',
 		'icon' => 'art',
-		'instructions' => 'This block displays a set amount of artworks based on the provided limit.', 
+		'instructions' => 'This block displays a set amount of artworks based on the provided limit.',
 		'render_query' => [
 			'query' => $collection_query,
 			'loop' => true,

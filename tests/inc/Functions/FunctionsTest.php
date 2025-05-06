@@ -2,10 +2,10 @@
 
 namespace RemoteDataBlocks\Tests\Editor\BlockManagement;
 
-use Psr\Log\LogLevel;
 use PHPUnit\Framework\TestCase;
 use RemoteDataBlocks\Editor\BlockManagement\ConfigRegistry;
 use RemoteDataBlocks\Editor\BlockManagement\ConfigStore;
+use RemoteDataBlocks\Logging\LogLevel;
 use RemoteDataBlocks\Tests\Mocks\MockLogger;
 use RemoteDataBlocks\Tests\Mocks\MockQuery;
 
@@ -60,11 +60,8 @@ class FunctionsTest extends TestCase {
 					'__class' => 'RemoteDataBlocks\Tests\Mocks\MockQuery',
 					'data_source' => [
 						'__class' => 'RemoteDataBlocks\Tests\Mocks\MockDataSource',
-						'service_config' => [
-							'__version' => 1,
-							'display_name' => 'Mock Data Source',
-							'endpoint' => 'https://example.com/api',
-						],
+						'display_name' => 'Mock Data Source',
+						'endpoint' => 'https://example.com/api',
 					],
 					'display_name' => 'Mock Query',
 					'input_schema' => [],

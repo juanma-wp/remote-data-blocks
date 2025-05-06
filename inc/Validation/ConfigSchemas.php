@@ -43,11 +43,11 @@ final class ConfigSchemas {
 		return $schema;
 	}
 
-	public static function get_http_data_source_service_config_schema(): array {
+	public static function get_generic_http_data_source_config_schema(): array {
 		static $schema = null;
 
 		if ( null === $schema ) {
-			$schema = self::generate_http_data_source_service_config_schema();
+			$schema = self::generate_generic_http_data_source_config_schema();
 		}
 
 		return $schema;
@@ -141,26 +141,17 @@ final class ConfigSchemas {
 					Types::record( Types::string(), Types::string() ),
 				)
 			),
-			'service' => Types::string(),
-			'service_config' => Types::record( Types::string(), Types::any() ),
 			'uuid' => Types::nullable( Types::uuid() ),
 		] );
 	}
 
-	private static function generate_http_data_source_service_config_schema(): array {
-		return Types::object( [
-			'__version' => Types::integer(),
-			'auth' => Types::nullable(
-				Types::object( [
-					'add_to' => Types::nullable( Types::enum( 'header', 'query' ) ),
-					'key' => Types::nullable( Types::skip_sanitize( Types::string() ) ),
-					'type' => Types::enum( 'basic', 'bearer', 'api-key', 'none' ),
-					'value' => Types::skip_sanitize( Types::string() ),
-				] )
-			),
-			'display_name' => Types::string(),
-			'endpoint' => Types::url(),
-		] );
+	private static function generate_generic_http_data_source_config_schema(): array {
+		return Types::merge_object_types(
+			self::generate_http_data_source_config_schema(),
+			Types::object( [
+				'service_config' => Types::nullable( Types::record( Types::string(), Types::not( Types::callable() ) ) ),
+			] )
+		);
 	}
 
 	private static function generate_http_query_config_schema(): array {
